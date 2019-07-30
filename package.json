@@ -1,0 +1,40 @@
+{
+  "name": "gyl-queue",
+  "version": "0.1.0",
+  "description": "Processes an email queue: handles autoresponders, archiving tasks, and taking email items from a queue in an AWS DynamoDB database and sending them with AWS Simple Email Service.",
+  "main": "src/gyl-queue.js",
+  "scripts": {
+    "start": "node ./src/gyl-queue.js",
+    "test": "nyc ava"
+  },
+  "author": "https://github.com/gyl-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/growyourlist/gyl-queue"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.390.0",
+    "dotenv": "^8.0.0",
+    "dynopromise-client": "^0.2.0",
+    "moment-timezone": "^0.5.23",
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "ava": "^2.1.0",
+    "nodemon": "^1.18.9",
+    "nyc": "^14.1.1",
+    "sinon": "^7.3.2"
+  },
+  "ava": {
+    "files": [
+      "test/**/*"
+    ]
+  },
+  "nyc": {
+    "reporter": [
+      "lcov",
+      "text"
+    ]
+  }
+}
