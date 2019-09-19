@@ -4,6 +4,7 @@ const queueNextActions = require('./queueNextActions')
 const sendEmailBatch = require('./sendEmailBatch')
 const refreshSubscribers = require('./refreshSubscribers')
 const unsubscribeSubscribers = require('./unsubscribeSubscribers')
+const wrapWaitTasks = require('./wrapWaitTasks')
 const readBatchSize = 50
 const writeBatchSize = 25
 
@@ -147,8 +148,11 @@ class Queue {
 			task => task.type === 'make choice based on tag'
 		)
 		const unsubscribeBatch = batch.filter(task => task.type === 'unsubscribe')
+		const waitBatch = batch.filter(task => task.type === 'wait')
 
-		if (!emailBatch.length && !tagBatch.length) {
+		// If there are no tasks to do, leave.
+		if (!emailBatch.length && !tagBatch.length && !unsubscribeBatch.length
+			&& !waitBatch.length) {
 			return Promise.resolve()
 		}
 
@@ -163,10 +167,11 @@ class Queue {
 					unsubscribeSubscribers(unsubscribeBatch)
 				) || []
 			),
+			Promise.resolve((waitBatch.length && wrapWaitTasks(waitBatch)) || [])
 		])
 		.then(resultBatches => {
 			const results = resultBatches[0].concat(
-				resultBatches[1], resultBatches[2]
+				resultBatches[1], resultBatches[2], resultBatches[3]
 			)
 			const cleanUpTasks = results.map(result => {
 
