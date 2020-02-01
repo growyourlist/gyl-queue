@@ -8,14 +8,12 @@ let isProcessing = false
 let processId = null
 const dynamodbParams = {
 	region: process.env.AWS_REGION,
+	accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+	secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
 }
 
 if (process.env.DYNAMODB_ENDPOINT) {
 	dynamodbParams.endpoint = process.env.DYNAMODB_ENDPOINT
-}
-else {
-	dynamodbParams.accessKeyId = process.env.AWS_ACCESS_KEY_ID
-	dynamodbParams.secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
 }
 
 const db = new AWS.DynamoDB(dynamodbParams)
@@ -44,14 +42,30 @@ class QueueManager {
 	}
 
 	off() {
-		console.log(`${(new Date).toISOString()}: Stopping queue, please wait...`)
-		if (processId) {
-			clearInterval(processId)
-			if (!isProcessing) {
-				console.log('Safe to terminate process')
+		return new Promise((resolve, reject) => {
+			console.log(`${(new Date).toISOString()}: Stopping queue, please wait...`)
+			if (processId) {
+				clearInterval(processId)
+				if (!isProcessing) {
+					console.log('Safe to terminate process')
+					return resolve()
+				}
+				let checks = 0
+				let checkOffInterval = setInterval(() => {
+					if (!isProcessing) {
+						clearInterval(checkOffInterval)
+						checkOffInterval = null
+						return resolve()
+					}
+					checks++
+					if (checks > 20) {
+						return reject(new Error('Timed out waiting for queue to exit'))
+					}
+				}, 100)
+				processId = null
 			}
-		}
-		processId = null
+			return resolve()
+		})
 	}
 
 	getIsProcessing() {

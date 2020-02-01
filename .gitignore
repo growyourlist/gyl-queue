@@ -2,3 +2,5 @@
 .nyc_output
 node_modules
 coverage
+/dynamodb_local_latest.zip
+/dynamodb_local_latest

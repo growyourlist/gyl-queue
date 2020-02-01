@@ -40,7 +40,7 @@ const getTemplateSettings = templateId => {
 			cachedAt: Date.now() + parseInt(Math.random() * 15000),
 			item: {
 				templateId,
-				sourceEmail: process.env.FALLBACK_SOURCE_EMAIL,
+				sourceEmail: null,
 			}
 		}
 		return cachedTemplates[templateId].item

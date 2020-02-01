@@ -5,7 +5,8 @@
   "main": "src/gyl-queue.js",
   "scripts": {
     "start": "node ./src/gyl-queue.js",
-    "test": "nyc ava"
+    "test": "nyc ava",
+    "test:e2e": "node test-e2e"
   },
   "author": "https://github.com/gyl-dev",
   "license": "MIT",
@@ -24,7 +25,8 @@
     "ava": "^2.1.0",
     "nodemon": "^1.18.9",
     "nyc": "^14.1.1",
-    "sinon": "^7.3.2"
+    "sinon": "^7.3.2",
+    "unzipper": "^0.10.5"
   },
   "ava": {
     "files": [

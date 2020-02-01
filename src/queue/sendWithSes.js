@@ -3,6 +3,7 @@ const debugLog = require('./debugLog')
 const getTemplateSettings = require('./getTemplateSettings')
 const maybeCleanBroadcastHistory = require('./maybeCleanBroadcastHistory')
 const updateBroadcastHistory = require('./updateBroadcastHistory')
+const getListSettings = require('./getListSettings')
 
 let broadcastHistory = {}
 
@@ -24,7 +25,7 @@ const ses = process.env.SES_TEST !== 'true' ? new AWS.SES({
 			})`
 		).join(', ')
 		console.log(`Sending "${input.Template}" template to: ${list}`)
-		console.log('DefaultTags')
+		console.log(`From source: ${input.Source}`)
 		console.log(input.DefaultTags)
 		callback(null, {
 			Status: input.Destinations.map(() => ({
@@ -34,7 +35,14 @@ const ses = process.env.SES_TEST !== 'true' ? new AWS.SES({
 	}
 }
 
-const unsubLinkTemplate = process.env.UNSUBSCRIBE_LINK_TEMPLATE
+const unsubLinkTemplate = process.env.UNSUBSCRIBE_LINK_TEMPLATE || ''
+if (!unsubLinkTemplate || !unsubLinkTemplate.trim()) {
+	throw new Error(`Please provide a UNSUBSCRIBE_LINK_TEMPLATE variable in the .env file. Variables {{subscriberId}} and {{email}} can be used in this string template.`)
+}
+
+if (!process.env.SOURCE_EMAIL || !process.env.SOURCE_EMAIL.trim()) {
+	throw new Error(`Please provide a default SOURCE_EMAIL address in the .env file. This address will be the default from address for all emails that do not have a more specific source email address (i.e. set for the template or list).`)
+}
 
 const sendWithSes = (batch, dateStamp) => {
 
@@ -71,14 +79,19 @@ const sendWithSes = (batch, dateStamp) => {
 
 	const bulkSends = []
 	for (let templateId in templateGroups) {
-		bulkSends.push(new Promise(resolve =>
-			getTemplateSettings(templateId)
-			.then(templateSettings => {
+		bulkSends.push(new Promise(resolve => Promise.all([
+				getTemplateSettings(templateId),
+				getListSettings(templateGroups[templateId][0].tagReason)
+			]).then(templateAndListSettings => {
+				const templateSettings = templateAndListSettings[0]
+				const listSourceEmail = (templateAndListSettings[1] && templateAndListSettings[1].sourceEmail) || ''
 				const unsubscribeLink = (
 					templateSettings.unsubscribeLink || unsubLinkTemplate
 				)
 				ses.sendBulkTemplatedEmail({
-					Source: templateSettings.sourceEmail || process.env.SOURCE_EMAIL,
+					Source: templateSettings.sourceEmail || 
+						listSourceEmail ||
+						process.env.SOURCE_EMAIL,
 					Template: templateId,
 					ConfigurationSetName: 'Default',
 					DefaultTemplateData: JSON.stringify({}),
