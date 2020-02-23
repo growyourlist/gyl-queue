@@ -36,9 +36,6 @@ const ses = process.env.SES_TEST !== 'true' ? new AWS.SES({
 }
 
 const unsubLinkTemplate = process.env.UNSUBSCRIBE_LINK_TEMPLATE || ''
-if (!unsubLinkTemplate || !unsubLinkTemplate.trim()) {
-	throw new Error(`Please provide a UNSUBSCRIBE_LINK_TEMPLATE variable in the .env file. Variables {{subscriberId}} and {{email}} can be used in this string template.`)
-}
 
 if (!process.env.SOURCE_EMAIL || !process.env.SOURCE_EMAIL.trim()) {
 	throw new Error(`Please provide a default SOURCE_EMAIL address in the .env file. This address will be the default from address for all emails that do not have a more specific source email address (i.e. set for the template or list).`)
