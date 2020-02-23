@@ -1,5 +1,6 @@
 const db = require('./db')
 const debugLog = require('./debugLog')
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 const broadcastHistorySettingName = 'broadcastHistory'
 
@@ -9,7 +10,7 @@ const updateBroadcastHistory = async broadcastData => {
 	// dateStamp (YYYY-MM-DD) combination.
 	try {
 		const broadcastHistoryResult = await db.get({
-			TableName: 'Settings',
+			TableName: `${dbTablePrefix}Settings`,
 			Key: { settingName: broadcastHistorySettingName }
 		})
 
@@ -30,7 +31,7 @@ const updateBroadcastHistory = async broadcastData => {
 			})
 			broadcastHistory[templateId] = templateBroadcastHistory
 			await db.put({
-				TableName: 'Settings',
+				TableName: `${dbTablePrefix}Settings`,
 				Item: {
 					settingName: broadcastHistorySettingName,
 					value: broadcastHistory,
@@ -64,7 +65,7 @@ const updateBroadcastHistory = async broadcastData => {
 			templateBroadcastHistory.splice(templateBroadcastHistory.length-1, 1, updatedChunk)
 			broadcastHistory[templateId] = templateBroadcastHistory
 			await db.put({
-				TableName: 'Settings',
+				TableName: `${dbTablePrefix}Settings`,
 				Item: {
 					settingName: broadcastHistorySettingName,
 					value: broadcastHistory,
@@ -83,7 +84,7 @@ const updateBroadcastHistory = async broadcastData => {
 		templateBroadcastHistory.push(newChunk)
 		broadcastHistory[templateId] = templateBroadcastHistory
 		await db.put({
-			TableName: 'Settings',
+			TableName: `${dbTablePrefix}Settings`,
 			Item: {
 				settingName: broadcastHistorySettingName,
 				value: broadcastHistory,

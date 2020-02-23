@@ -3,6 +3,8 @@ const AWS = require('aws-sdk')
 const debugLog = require('./queue/debugLog')
 const Queue = require('./queue/Queue')
 
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
+
 const queue = new Queue
 let isProcessing = false
 let processId = null
@@ -20,7 +22,7 @@ const db = new AWS.DynamoDB(dynamodbParams)
 
 const getTableStatusIsActive = () => new Promise(resolve => {
 	db.describeTable({
-		TableName: 'Queue',
+		TableName: `${dbTablePrefix}Queue`,
 	}, (err, data) => {
 		if (err) {
 			console.log(`${(new Date).toISOString()}: Error describing table: `

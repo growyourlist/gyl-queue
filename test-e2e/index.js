@@ -10,7 +10,7 @@ const QueueManager = require('../src/QueueManager')
 const dynamodbCmd = 'java -DDynamodDBLocal_lib/ -jar DynamoDBLocal.jar '
 + '-inMemory'
 
-const dbPrefix = process.env.DB_PREFIX || ''
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || ''
 
 const db = dynopromise({
 	region: process.env.AWS_REGION,
@@ -49,14 +49,14 @@ const addFakeItems = async () => {
 		tagReason: ['list-test']
 	})
 	await Promise.all(fakeItems1.map(Item => db.put({
-		TableName: `${dbPrefix}Queue`,
+		TableName: `${dbTablePrefix}Queue`,
 		Item
 	})))
 	const fakeItems2 = generateFakeQueueItems(3, {
 		tagReason: ['list-testb']
 	})
 	await Promise.all(fakeItems2.map(Item => db.put({
-		TableName: `${dbPrefix}Queue`,
+		TableName: `${dbTablePrefix}Queue`,
 		Item
 	})))
 	const fakeItems3 = generateFakeQueueItems(3, {
@@ -64,14 +64,14 @@ const addFakeItems = async () => {
 		templateId: 'TestSourceTemplate',
 	})
 	await Promise.all(fakeItems3.map(Item => db.put({
-		TableName: `${dbPrefix}Queue`,
+		TableName: `${dbTablePrefix}Queue`,
 		Item
 	})))
 }
 
 const setListSettings = async () => {
 	await db.put({
-		TableName: `${dbPrefix}Settings`,
+		TableName: `${dbTablePrefix}Settings`,
 		Item: {
 			"settingName": "lists",
 			"value": [
@@ -87,7 +87,7 @@ const setListSettings = async () => {
 
 const setTestSourceTemplateSettings = async () => {
 	await db.put({
-		TableName: `${dbPrefix}Settings`,
+		TableName: `${dbTablePrefix}Settings`,
 		Item: {
 			"settingName": "template-TestSourceTemplate",
 			"value": {

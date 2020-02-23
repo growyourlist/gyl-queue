@@ -1,9 +1,10 @@
 const db = require('./db')
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 const refreshSubscribers = batch => {
 	return Promise.all(batch.map(item => {
 		return db.get({
-			TableName: 'Subscribers',
+			TableName: `${dbTablePrefix}Subscribers`,
 			Key: { subscriberId: item.subscriberId }
 		})
 		.then(subscriberResult => {

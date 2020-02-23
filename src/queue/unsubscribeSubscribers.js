@@ -1,9 +1,11 @@
 const db = require('./db')
 
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
+
 const unsubscribeSubscribers = batch => {
 	return Promise.all(batch.map(item => {
 		return db.query({
-			TableName: 'Queue',
+			TableName: `${dbTablePrefix}Queue`,
 			IndexName: 'subscriberId-index',
 			KeyConditionExpression: '#subscriberId = :subscriberId',
 			FilterExpression: '#queuePlacement = :queued',
@@ -18,7 +20,7 @@ const unsubscribeSubscribers = batch => {
 		})
 		.then(queuedItemsResult => {
 			return db.update({
-				TableName: 'Subscribers',
+				TableName: `${dbTablePrefix}Subscribers`,
 				Key: { subscriberId: item.subscriberId },
 				UpdateExpression: 'SET #unsubscribed = :true, #tags = :unsubtags',
 				ExpressionAttributeNames: {
@@ -36,7 +38,7 @@ const unsubscribeSubscribers = batch => {
 				}
 				return Promise.all(queuedItemsResult.Items.map(item => {
 					return db.delete({
-						TableName: 'Queue',
+						TableName: `${dbTablePrefix}Queue`,
 						Key: {
 							queuePlacement: item.queuePlacement,
 							runAtModified: item.runAtModified,

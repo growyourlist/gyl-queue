@@ -1,4 +1,5 @@
 const db = require('./db')
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || ''
 
 const cachedLists = {}
 
@@ -30,7 +31,7 @@ const getListSettings = async tags => {
     try {
         // Get the lists settings from the db.
         const listSettingsResponse = await db.get({
-            TableName: 'Settings',
+            TableName: `${dbTablePrefix}Settings`,
             Key: {
                 settingName: `lists`
             }

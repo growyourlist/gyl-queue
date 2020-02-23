@@ -1,4 +1,5 @@
 const db = require('./db')
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 const cachedTemplates = {}
 
@@ -20,7 +21,7 @@ const getTemplateSettings = templateId => {
 		return Promise.resolve(cachedTemplates[templateId].item)
 	}
 	return db.get({
-		TableName: 'Settings',
+		TableName: `${dbTablePrefix}Settings`,
 		Key: {
 			settingName: `template-${templateId}`
 		}

@@ -7,6 +7,7 @@ const unsubscribeSubscribers = require('./unsubscribeSubscribers')
 const wrapWaitTasks = require('./wrapWaitTasks')
 const readBatchSize = 50
 const writeBatchSize = 25
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 /**
  * Flag indicating that nothing was processed on the last batch.
@@ -24,7 +25,7 @@ class Queue {
 	 */
 	getBatch() {
 		const getBatchParams = {
-			TableName: 'Queue',
+			TableName: `${dbTablePrefix}Queue`,
 			ConsistentRead: true,
 			Limit: readBatchSize,
 			ScanIndexForward: false,
@@ -66,7 +67,7 @@ class Queue {
 		return new Promise((resolve, reject) => {
 			db.batchWrite({
 				RequestItems: {
-					Queue: batch
+					[`${dbTablePrefix}Queue`]: batch
 				}
 			})
 			.then(result => {
@@ -106,7 +107,7 @@ class Queue {
 		return new Promise((resolve, reject) => {
 			db.batchWrite({
 				RequestItems: {
-					Queue: batch
+					[`${dbTablePrefix}Queue`]: batch
 				}
 			})
 			.then(result => {

@@ -1,5 +1,5 @@
 const db = require('./db')
-
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 const cachedAutoresponders = {}
 
 // Cache autoresponders for 10 minutes
@@ -20,7 +20,7 @@ const getAutoresponder = autoresponderId => {
 		return Promise.resolve(cachedAutoresponders[autoresponderId].item)
 	}
 	return db.get({
-		TableName: 'Settings',
+		TableName: `${dbTablePrefix}Settings`,
 		Key: {
 			settingName: `autoresponder-${autoresponderId}`
 		}
