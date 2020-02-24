@@ -90,7 +90,7 @@ const sendWithSes = (batch, dateStamp) => {
 						listSourceEmail ||
 						process.env.SOURCE_EMAIL,
 					Template: templateId,
-					ConfigurationSetName: 'Default',
+					ConfigurationSetName: 'GylSesConfigurationSet',
 					DefaultTemplateData: JSON.stringify({}),
 					DefaultTags: [
 						{
