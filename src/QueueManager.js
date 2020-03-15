@@ -1,106 +1,111 @@
-const AWS = require('aws-sdk')
-
-const debugLog = require('./queue/debugLog')
-const Queue = require('./queue/Queue')
+const debugLog = require('./queue/debugLog');
+const Queue = require('./queue/Queue');
+const db = require('./dynamoDBClient');
 
 const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
-const queue = new Queue
-let isProcessing = false
-let processId = null
-const dynamodbParams = {
-	region: process.env.AWS_REGION,
-	accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-	secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-}
+const queue = new Queue();
+let isProcessing = false;
+let processId = null;
 
-if (process.env.DYNAMODB_ENDPOINT) {
-	dynamodbParams.endpoint = process.env.DYNAMODB_ENDPOINT
-}
-
-const db = new AWS.DynamoDB(dynamodbParams)
-
-const getTableStatusIsActive = () => new Promise(resolve => {
-	db.describeTable({
-		TableName: `${dbTablePrefix}Queue`,
-	}, (err, data) => {
-		if (err) {
-			console.log(`${(new Date).toISOString()}: Error describing table: `
-			+ err.message)
-			return resolve(false)
-		}
-		return resolve(data && data.Table && data.Table.TableStatus === 'ACTIVE')
-	})
-})
+/**
+ * Returns true if the Queue table exists and is active, false otherwise.
+ * @returns {Promise<boolean>}
+ */
+const getTableStatusIsActive = () => db.describeTable(
+	{ TableName: `${dbTablePrefix}Queue` }
+)
+	.promise()
+	.then(res => res  && res.Table && res.Table.TableStatus === 'ACTIVE')
+	.catch(err => {
+		console.log(`Error describing table: ${err.message}`);
+		return false;
+	});
 
 /**
  * Turns the queue on or off and keeps it processing at regular intervals.
  */
 class QueueManager {
 
+	/**
+	 * Starts a regular interval for queue processing.
+	 */
 	on() {
-		console.log(`${(new Date).toISOString()}: Processing queue`)
-		processId = setInterval(this.processQueue, 1000)
+		console.log(`Started processing queue`);
+		processId = setInterval(this.processQueue, 1000);
 	}
 
+	/**
+	 * Turns off queue processing, waits for the current batch to complete then
+	 * stops.
+	 * @returns {Promise<void>}
+	 */
 	off() {
 		return new Promise((resolve, reject) => {
-			console.log(`${(new Date).toISOString()}: Stopping queue, please wait...`)
+			console.log(`Stopping queue, please wait...`);
 			if (processId) {
-				clearInterval(processId)
+				clearInterval(processId);
 				if (!isProcessing) {
-					console.log('Safe to terminate process')
-					return resolve()
+					console.log('Safe to terminate process');
+					return resolve();
 				}
-				let checks = 0
+				let checks = 0;
 				let checkOffInterval = setInterval(() => {
 					if (!isProcessing) {
-						clearInterval(checkOffInterval)
-						checkOffInterval = null
-						return resolve()
+						clearInterval(checkOffInterval);
+						checkOffInterval = null;
+						return resolve();
 					}
-					checks++
+					checks++;
+					// Continue checking for up to 2 seconds
 					if (checks > 20) {
-						return reject(new Error('Timed out waiting for queue to exit'))
+						clearInterval(checkOffInterval);
+						checkOffInterval = null;
+						return reject(new Error('Timed out waiting for queue to exit'));
 					}
-				}, 100)
-				processId = null
+				}, 100);
+				processId = null;
 			}
-			return resolve()
-		})
+			return resolve();
+		});
 	}
 
+	/**
+	 * Returns true if the QueueManager is processing the queue, false otherwise.
+	 * @returns {boolean}
+	 */
 	getIsProcessing() {
-		return !!processId
+		return !!processId;
 	}
 
-	processQueue() {
+	/**
+	 * Triggers one batch of queue processing after checking Queue table is
+	 * active. Catches errors during queue processing.
+	 * @returns {Promise<void>}
+	 */
+	async processQueue() {
 		if (isProcessing) {
-			debugLog(`${(new Date()).toISOString()}: Skipping due to processing `
-			+ 'overlap')
-			return Promise.resolve()
+			debugLog('Skipping due to processing overlap');
+			return;
 		}
-		isProcessing = true
-		return getTableStatusIsActive()
-		.then(isActive => {
-			if (isActive) {
-				return queue.process()
+		isProcessing = true;
+		try {
+			const tableIsActive = await getTableStatusIsActive();
+			if (tableIsActive) {
+				await queue.process()
 			}
-			console.log(`${(new Date()).toISOString()}: Skipping due to inactive`
-			+ ' table')
-			return Promise.resolve()
-		})
-		.catch(err => {
-			console.log(`${(new Date()).toISOString()}: Error processing queue:`)
+			else {
+				console.log('Skipping due to inactive table');
+			}
+		} catch (err) {
+			console.error('Error processing queue')
 			console.error(err)
-		})
-		.then(() => {
-			isProcessing = false
-			if (!processId) {
-				console.log('Safe to terminate process')
-			}
-		})
+		}
+		isProcessing = false;
+		if (!processId) {
+			console.log('Safe to terminate process');
+		}
 	}
 }
 
-module.exports = QueueManager
+module.exports = QueueManager;
