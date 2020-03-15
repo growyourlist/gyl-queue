@@ -1,11 +1,15 @@
 require('dotenv').config()
 const { exec, spawn } = require('child_process')
-const { createTables } = require('gyl-init')
 const dynopromise = require('dynopromise-client')
 
+const createTables = require('./helpers/createTables')
 const downloadDynamodb = require('./helpers/downloadDynamodb')
-const generateFakeQueueItems = require('./helpers/generateFakeQueueItems')
+const {
+	generateFakeQueueItems,
+	generateIndividualSendFakeQueueItems,
+} = require('./helpers/generateFakeQueueItems')
 const QueueManager = require('../src/QueueManager')
+const Logger = require('../src/Logger');
 
 const dynamodbCmd = 'java -DDynamodDBLocal_lib/ -jar DynamoDBLocal.jar '
 + '-inMemory'
@@ -52,6 +56,11 @@ const addFakeItems = async () => {
 		TableName: `${dbTablePrefix}Queue`,
 		Item
 	})))
+	const fakeIndividualItems1 = generateIndividualSendFakeQueueItems(6);
+	await Promise.all(fakeIndividualItems1.map(Item => db.put({
+		TableName: `${dbTablePrefix}Queue`,
+		Item,
+	})))
 	const fakeItems2 = generateFakeQueueItems(3, {
 		tagReason: ['list-testb']
 	})
@@ -67,6 +76,7 @@ const addFakeItems = async () => {
 		TableName: `${dbTablePrefix}Queue`,
 		Item
 	})))
+	Logger.log('Fake items added to queue');
 }
 
 const setListSettings = async () => {
@@ -141,13 +151,7 @@ const run = async () => {
 			throw new Error('Expected DynamoDB endpoint to be used for testing')
 		}
 
-		await createTables({
-			region: process.env.AWS_REGION,
-			accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-			endpoint: process.env.DYNAMODB_ENDPOINT,
-		})
-
+		await createTables()
 		await addFakeItems()
 		await setListSettings()
 		await setTestSourceTemplateSettings()

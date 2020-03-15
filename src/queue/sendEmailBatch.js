@@ -15,6 +15,11 @@ const sendWithSes = require('./sendWithSes')
  * @param  {Array} batch
  * @return {Promise}
  */
-const sendEmailBatch = (batch, dateStamp) => sendWithSes(batch, dateStamp)
+const sendEmailBatch = async (batch, dateStamp) => {
+	if (!batch.length) {
+		return batch;
+	}
+	return await sendWithSes(batch, dateStamp)
+}
 
 module.exports = sendEmailBatch

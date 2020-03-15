@@ -1,241 +1,182 @@
-const db = require('./db')
-const debugLog = require('./debugLog')
-const queueNextActions = require('./queueNextActions')
-const sendEmailBatch = require('./sendEmailBatch')
-const refreshSubscribers = require('./refreshSubscribers')
-const unsubscribeSubscribers = require('./unsubscribeSubscribers')
-const wrapWaitTasks = require('./wrapWaitTasks')
-const readBatchSize = 50
-const writeBatchSize = 25
+const db = require('../dynamoDBDocumentClient');
+const debugLog = require('./debugLog');
+const Logger = require('../Logger');
+const queueNextActions = require('./queueNextActions');
+const sendEmailBatch = require('./sendEmailBatch');
+const refreshSubscribers = require('./refreshSubscribers');
+const unsubscribeSubscribers = require('./unsubscribeSubscribers');
+const wrapWaitTasks = require('./wrapWaitTasks');
+const readBatchSize = 50;
+const writeBatchSize = 25;
 const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 /**
  * Flag indicating that nothing was processed on the last batch.
  */
-let nothingToProcessLastBatch = false
+let nothingToProcessLastBatch = false;
 
 /**
  * Processes a queue of tasks to send emails.
  */
 class Queue {
+	/**
+	 * Fetches the next batch of queued tasks and processes them.
+	 * @return {Promise<void>}
+	 */
+	async process() {
+		const batch = await this.getBatch();
+		if (!Array.isArray(batch) || !batch.length) {
+			if (!nothingToProcessLastBatch) {
+				debugLog('Nothing to process');
+			}
+			nothingToProcessLastBatch = true;
+			return;
+		}
+		nothingToProcessLastBatch = false;
+		debugLog(`Pulled ${batch.length} items to process`);
+		await this.processBatch(batch);
+	}
 
 	/**
 	 * Gets the next batch of queued tasks.
-	 * @return {Promise<object[]>}
 	 */
-	getBatch() {
+	async getBatch() {
 		const getBatchParams = {
 			TableName: `${dbTablePrefix}Queue`,
 			ConsistentRead: true,
 			Limit: readBatchSize,
 			ScanIndexForward: false,
-			KeyConditionExpression: "queuePlacement = :q and runAtModified <= :now",
+			KeyConditionExpression: 'queuePlacement = :q and runAtModified <= :now',
 			ExpressionAttributeValues: {
-				":q": 'queued',
-				":now": Date.now().toString(),
-			}
-		}
-		return db.query(getBatchParams)
-		.then(data => data.Items)
+				':q': 'queued',
+				':now': Date.now().toString(),
+			},
+		};
+		const res = await db.query(getBatchParams).promise();
+		return res.Items;
 	}
 
 	/**
-	 * Fetches the next batch of queued tasks and processes them.
-	 * @return {Promise}
-	 */
-	process() {
-		return this.getBatch()
-		.then(batch => {
-			if (!batch || !batch.length) {
-				if (!nothingToProcessLastBatch) {
-					debugLog(`${(new Date).toISOString()}: Nothing to process`)
-				}
-				nothingToProcessLastBatch = true
-				return []
-			}
-			nothingToProcessLastBatch = false
-			debugLog(`${(new Date).toISOString()}: Pulled ${batch.length} items to `
-			+ `process`)
-			return this.processBatch(batch)
-		})
-	}
-
-	/**
-	 * Processes the clean up tasks.
-	 */
-	taskCleanUp(batch, taskCounter = 0) {
-		return new Promise((resolve, reject) => {
-			db.batchWrite({
-				RequestItems: {
-					[`${dbTablePrefix}Queue`]: batch
-				}
-			})
-			.then(result => {
-				const unprocessedItems = result.UnprocessedItems.Queue
-				if (Array.isArray(unprocessedItems)) {
-					debugLog(`${(new Date).toISOString()}: Rescheduling `
-					+ `${unprocessedItems.length} unprocessed cleanup items`)
-					return setTimeout(() => {
-						taskCounter += (batch.length - unprocessedItems.length)
-						resolve(this.taskCleanUp(unprocessedItems, taskCounter))
-					}, Math.random() * 300)
-				}
-				return resolve(taskCounter + batch.length)
-			})
-			.catch(err => {
-				if (err.name === 'ProvisionedThroughputExceededException') {
-					debugLog(`${(new Date).toISOString()}: Requeuing cleanup batch `
-					+ 'after throughput exceeded')
-					return setTimeout(
-						() => resolve(this.taskCleanUp(batch, taskCounter)),
-						Math.random() * 500
-					)
-				}
-				console.log(`${(new Date).toISOString()}: Clean up batch failed:`)
-				console.log(err)
-				resolve(taskCounter)
-			})
-		})
-	}
-
-	/**
-	 * Processes the archive tasks.
-	 * @param {object[]} batch Array of archive items.
-	 * @param {Number} taskCounter Current number of tasks completed.
-	 */
-	addToArchive(batch, taskCounter = 0) {
-		return new Promise((resolve, reject) => {
-			db.batchWrite({
-				RequestItems: {
-					[`${dbTablePrefix}Queue`]: batch
-				}
-			})
-			.then(result => {
-				const unprocessedItems = result.UnprocessedItems.Queue
-				if (Array.isArray(unprocessedItems)) {
-					debugLog(`${(new Date).toISOString()}: Rescheduling `
-					+ `${unprocessedItems.length} unprocessed archive items`)
-					return setTimeout(() => {
-						taskCounter += (batch.length - unprocessedItems.length)
-						resolve(this.addToArchive(unprocessedItems, taskCounter))
-					}, Math.random() * 800)
-				}
-				return resolve(taskCounter += batch.length)
-			})
-			.catch(err => {
-				if (err.name === 'ProvisionedThroughputExceededException') {
-					debugLog(`${(new Date).toISOString()}: Requeuing archive batch after `
-					+ `throughput exceeded`)
-					return setTimeout(
-						() => resolve(this.addToArchive(batch, taskCounter)),
-						Math.random() * 3000
-					)
-				}
-				console.log(`${(new Date).toISOString()}: Archive batch failed: `)
-				console.log(err)
-				resolve(taskCounter)
-			})
-		})
-	}
-
-	/**
-	 * Given a batch of queued tasks, goes through each tasks and acts upon it.
+	 * Given a batch of queued tasks, goes through each task and acts upon it.
 	 * @param  {Array} batch The todo tasks.
 	 * @return {Promise}
 	 */
-	processBatch(batch) {
-		const emailBatch = batch.filter(task => task.type === 'send email')
-		const tagBatch = batch.filter(
-			task => task.type === 'make choice based on tag'
-		)
-		const unsubscribeBatch = batch.filter(task => task.type === 'unsubscribe')
-		const waitBatch = batch.filter(task => task.type === 'wait')
+	async processBatch(batch) {
+		const emailBatch = [];
+		const choiceBatch = [];
+		const unsubscribeBatch = [];
+		const waitBatch = [];
+		batch.forEach(task => {
+			switch (task.type) {
+				case 'send email':
+					emailBatch.push(task);
+					break;
+				case 'make choice based on tag':
+					choiceBatch.push(task);
+					break;
+				case 'unsubscribe':
+					unsubscribeBatch.push(task);
+					break;
+				case 'wait':
+					waitBatch.push(task);
+					break;
+				default:
+					break; // TODO handle unknown task types with warning.
+			}
+		});
 
 		// If there are no tasks to do, leave.
-		if (!emailBatch.length && !tagBatch.length && !unsubscribeBatch.length
-			&& !waitBatch.length) {
-			return Promise.resolve()
+		if (
+			!(
+				emailBatch.length ||
+				choiceBatch.length ||
+				unsubscribeBatch.length ||
+				waitBatch.length
+			)
+		) {
+			Logger.info('No tasks with recognised task types');
+			return;
 		}
 
-		const dateStamp = (new Date).toISOString().substring(0, 10)
-		return Promise.all([
-			Promise.resolve((emailBatch.length && sendEmailBatch(
-				emailBatch, dateStamp
-			)) || []),
-			Promise.resolve((tagBatch.length && refreshSubscribers(tagBatch)) || []),
-			Promise.resolve(
-				(unsubscribeBatch.length &&
-					unsubscribeSubscribers(unsubscribeBatch)
-				) || []
-			),
-			Promise.resolve((waitBatch.length && wrapWaitTasks(waitBatch)) || [])
-		])
-		.then(resultBatches => {
-			const results = resultBatches[0].concat(
-				resultBatches[1], resultBatches[2], resultBatches[3]
-			)
-			const cleanUpTasks = results.map(result => {
-
-				// Delete queue items that are successful or have been attempted
-				// too many times (note that deleted items are still archived).
-				if (result.status === 'success' || result.item.attempts > 0) {
-					return {
-						DeleteRequest: {
-							Key: {
-								queuePlacement: result.item.queuePlacement,
-								runAtModified: result.item.runAtModified
-							}
-						}
-					}
-				}
-
-				// Update queue items that can be reattempted.
-				const updatedItem = {
-					Item: Object.assign({}, result.item, {
-						failed: true,
-						attempts: result.item.attempts + 1,
-						lastAttempt: result.timestamp
-					})
-				}
-				if (result.failureReason) {
-					const newFailureReason = (
-						(result.item.failureReason || '' ) + ' ' + result.failureReason
-					).trim()
-					updatedItem.Item.failureReason = newFailureReason
-				}
+		const dateStamp = new Date().toISOString().substring(0, 10);
+		const resultBatches = await Promise.all([
+			sendEmailBatch(emailBatch, dateStamp),
+			refreshSubscribers(choiceBatch),
+			unsubscribeSubscribers(unsubscribeBatch),
+			wrapWaitTasks(waitBatch),
+		]);
+		const results = resultBatches[0].concat(
+			resultBatches[1],
+			resultBatches[2],
+			resultBatches[3]
+		);
+		Logger.info(`Got ${results.length} processing results. Now cleaning up`);
+		const cleanUpTasks = results.map(result => {
+			// Delete queue items that are successful or have been attempted
+			// too many times (note that deleted items are still archived).
+			if (result.status === 'success' || result.item.attempts > 0) {
 				return {
-					PutRequest: updatedItem
-				}
-			})
+					DeleteRequest: {
+						Key: {
+							queuePlacement: result.item.queuePlacement,
+							runAtModified: result.item.runAtModified,
+						},
+					},
+				};
+			}
 
-			let currentBatch = []
-			const batches = []
-			cleanUpTasks.forEach(task => {
-				if (currentBatch.length === writeBatchSize) {
-					batches.push(currentBatch)
-					currentBatch = []
-				}
-				currentBatch.push(task)
-			})
-			batches.push(currentBatch)
+			// Update queue items that can be reattempted.
+			const updatedItem = {
+				Item: Object.assign({}, result.item, {
+					failed: true,
+					attempts: result.item.attempts + 1,
+					lastAttempt: result.timestamp,
+				}),
+			};
+			if (result.failureReason) {
+				const newFailureReason = (
+					(result.item.failureReason || '') +
+					' ' +
+					result.failureReason
+				).trim();
+				updatedItem.Item.failureReason = newFailureReason;
+			}
+			return {
+				PutRequest: updatedItem,
+			};
+		});
 
-			return Promise.all(batches.map(cleanupBatch => {
-				return this.taskCleanUp(cleanupBatch)
-			}))
+		let currentBatch = [];
+		const batches = [];
+		cleanUpTasks.forEach(task => {
+			if (currentBatch.length === writeBatchSize) {
+				batches.push(currentBatch);
+				currentBatch = [];
+			}
+			currentBatch.push(task);
+		});
+		batches.push(currentBatch);
+
+		return Promise.all(
+			batches.map(cleanupBatch => {
+				return this.taskCleanUp(cleanupBatch);
+			})
+		)
 			.then(counters => {
-
-				let totalTasks = 0
-				counters.forEach(counter => totalTasks += counter)
-				debugLog(`${(new Date).toISOString()}: ${totalTasks} cleanup tasks `
-				+ `complete`)
+				let totalTasks = 0;
+				counters.forEach(counter => (totalTasks += counter));
+				debugLog(
+					`${new Date().toISOString()}: ${totalTasks} cleanup tasks ` +
+						`complete`
+				);
 
 				// Archive successful or permanently failed items
-				const archiveable = results.filter(res => (
-					res.status === 'success' || res.item.attempts > 0
-				))
+				const archiveable = results.filter(
+					res => res.status === 'success' || res.item.attempts > 0
+				);
 
 				if (!archiveable.length) {
-					return
+					return;
 				}
 
 				const archiveTasks = archiveable.map(result => {
@@ -252,53 +193,140 @@ class Queue {
 						subscriberId: result.item.subscriberId,
 						templateId: result.item.templateId,
 						type: result.item.type,
-					}
+					};
 					if (result.item.failureReason) {
-						archiveItem.failureReason = result.item.failureReason
+						archiveItem.failureReason = result.item.failureReason;
 					}
 					return {
 						PutRequest: {
-							Item: archiveItem
-						}
-					}
-				})
+							Item: archiveItem,
+						},
+					};
+				});
 
-				let currentArchiveBatch = []
-				const archiveBatches = []
+				let currentArchiveBatch = [];
+				const archiveBatches = [];
 				archiveTasks.forEach(archiveTask => {
 					if (currentArchiveBatch.length === writeBatchSize) {
-						archiveBatches.push(currentArchiveBatch)
-						currentArchiveBatch = []
+						archiveBatches.push(currentArchiveBatch);
+						currentArchiveBatch = [];
 					}
-					currentArchiveBatch.push(archiveTask)
-				})
-				archiveBatches.push(currentArchiveBatch)
+					currentArchiveBatch.push(archiveTask);
+				});
+				archiveBatches.push(currentArchiveBatch);
 
-				return Promise.all(archiveBatches.map(archiveBatch => {
-					return this.addToArchive(archiveBatch)
-				}))
-				.then(archiveCounters => {
-					let totalArchiveTasks = 0
-					archiveCounters.forEach(counter => totalArchiveTasks += counter)
-					debugLog(`${(new Date).toISOString()}: ${totalArchiveTasks} archive `
-					+ `tasks complete`)
-				})
+				return Promise.all(
+					archiveBatches.map(archiveBatch => {
+						return this.addToArchive(archiveBatch);
+					})
+				).then(archiveCounters => {
+					let totalArchiveTasks = 0;
+					archiveCounters.forEach(counter => (totalArchiveTasks += counter));
+					debugLog(
+						`${new Date().toISOString()}: ${totalArchiveTasks} archive ` +
+							`tasks complete`
+					);
+				});
 			})
 			.then(() => {
-
 				// Queue follow up actions for successful tasks
-				const successes = results.filter(res => (
-					res.status === 'success'
-				))
+				const successes = results.filter(res => res.status === 'success');
 
 				if (!successes.length) {
-					return
+					return;
 				}
 
-				return queueNextActions(successes.map(res => res.item))
+				return queueNextActions(successes.map(res => res.item));
+			});
+	}
+
+	/**
+	 * Processes the clean up tasks.
+	 */
+	taskCleanUp(batch, taskCounter = 0) {
+		return new Promise((resolve, reject) => {
+			db.batchWrite({
+				RequestItems: {
+					[`${dbTablePrefix}Queue`]: batch,
+				},
 			})
-		})
+				.promise()
+				.then(result => {
+					const unprocessedItems = result.UnprocessedItems.Queue;
+					if (Array.isArray(unprocessedItems)) {
+						debugLog(
+							`${new Date().toISOString()}: Rescheduling ` +
+								`${unprocessedItems.length} unprocessed cleanup items`
+						);
+						return setTimeout(() => {
+							taskCounter += batch.length - unprocessedItems.length;
+							resolve(this.taskCleanUp(unprocessedItems, taskCounter));
+						}, Math.random() * 300);
+					}
+					return resolve(taskCounter + batch.length);
+				})
+				.catch(err => {
+					if (err.name === 'ProvisionedThroughputExceededException') {
+						debugLog(
+							`${new Date().toISOString()}: Requeuing cleanup batch ` +
+								'after throughput exceeded'
+						);
+						return setTimeout(
+							() => resolve(this.taskCleanUp(batch, taskCounter)),
+							Math.random() * 500
+						);
+					}
+					console.log(`${new Date().toISOString()}: Clean up batch failed:`);
+					console.log(err);
+					resolve(taskCounter);
+				});
+		});
+	}
+
+	/**
+	 * Processes the archive tasks.
+	 * @param {object[]} batch Array of archive items.
+	 * @param {Number} taskCounter Current number of tasks completed.
+	 */
+	addToArchive(batch, taskCounter = 0) {
+		return new Promise((resolve, reject) => {
+			db.batchWrite({
+				RequestItems: {
+					[`${dbTablePrefix}Queue`]: batch,
+				},
+			})
+				.promise()
+				.then(result => {
+					const unprocessedItems = result.UnprocessedItems.Queue;
+					if (Array.isArray(unprocessedItems)) {
+						debugLog(
+							`${new Date().toISOString()}: Rescheduling ` +
+								`${unprocessedItems.length} unprocessed archive items`
+						);
+						return setTimeout(() => {
+							taskCounter += batch.length - unprocessedItems.length;
+							resolve(this.addToArchive(unprocessedItems, taskCounter));
+						}, Math.random() * 800);
+					}
+					return resolve((taskCounter += batch.length));
+				})
+				.catch(err => {
+					if (err.name === 'ProvisionedThroughputExceededException') {
+						debugLog(
+							`${new Date().toISOString()}: Requeuing archive batch after ` +
+								`throughput exceeded`
+						);
+						return setTimeout(
+							() => resolve(this.addToArchive(batch, taskCounter)),
+							Math.random() * 3000
+						);
+					}
+					console.log(`${new Date().toISOString()}: Archive batch failed: `);
+					console.log(err);
+					resolve(taskCounter);
+				});
+		});
 	}
 }
 
-module.exports = Queue
+module.exports = Queue;
