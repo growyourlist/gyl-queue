@@ -1,6 +1,6 @@
 /* istanbul ignore file */
 
-const isDebug = process.env.DEBUG === 'true'
+const isDebug = process.env.DEBUG === 'true' || !!process.env.VERBOSE;
 
 const debugLog = message => {
 	if (isDebug) {
