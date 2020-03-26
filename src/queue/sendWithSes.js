@@ -205,7 +205,7 @@ const sendWithSes = async (batch, dateStamp) => {
 			.then(async listSettings => {
 				return await ses.sendEmail({
 					Destination: { ToAddresses: [ item.subscriber.email ] },
-					Source: (listSettings && listSettings.sourceEmail) || item.sourceEmail || process.env.SOURCE_EMAIL,
+					Source: item.sourceEmail || (listSettings && listSettings.sourceEmail) || process.env.SOURCE_EMAIL,
 					Message: {
 						Subject: {
 							Charset: 'UTF-8',
