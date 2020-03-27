@@ -55,17 +55,21 @@ if (!process.env.SOURCE_EMAIL || !process.env.SOURCE_EMAIL.trim()) {
 	throw new Error(`Please provide a default SOURCE_EMAIL address in the .env file. This address will be the default from address for all emails that do not have a more specific source email address (i.e. set for the template or list).`)
 }
 
-const generateBody = itemBody => {
+const generateBody = (itemBody, subscriber) => {
 	const Body = {}
 	if (itemBody.html) {
 		Body.Html = {
-			Data: itemBody.html,
+			Data: itemBody.html
+				.replace(/\{\{subscriberId\}\}/g, encodeURIComponent(subscriber.subscriberId))
+				.replace(/\{\{email\}\}/g, encodeURIComponent(subscriber.email)),
 			Charset: 'UTF-8',
 		}
 	}
 	if (itemBody.text) {
 		Body.Text = {
-			Data: itemBody.text,
+			Data: itemBody.text
+				.replace(/\{\{subscriberId\}\}/g, encodeURIComponent(subscriber.subscriberId))
+				.replace(/\{\{email\}\}/g, encodeURIComponent(subscriber.email)),
 			Charset: 'UTF-8',
 		}
 	}
@@ -140,10 +144,10 @@ const sendWithSes = async (batch, dateStamp) => {
 								ReplacementTemplateData: JSON.stringify({
 									subscriber: item.subscriber,
 									unsubscribeLink: unsubscribeLink.replace(
-										/\{\{subscriberId\}\}/,
+										/\{\{subscriberId\}\}/g,
 										encodeURIComponent(item.subscriber.subscriberId)
 									).replace(
-										/\{\{email\}\}/,
+										/\{\{email\}\}/g,
 										encodeURIComponent(item.subscriber.email)
 									),
 									params: item.params,
@@ -211,7 +215,7 @@ const sendWithSes = async (batch, dateStamp) => {
 							Charset: 'UTF-8',
 							Data: item.subject,
 						},
-						Body: generateBody(item.body)
+						Body: generateBody(item.body, item.subscriber)
 					}
 				})
 				.promise()
