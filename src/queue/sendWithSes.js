@@ -142,6 +142,8 @@ const sendWithSes = async (batch, dateStamp) => {
 							const destParams = {
 								Destination: { ToAddresses: [item.subscriber.email] },
 								ReplacementTemplateData: JSON.stringify({
+									email: item.subscriber.email,
+									subscriberId: item.subscriber.subscriberId,
 									subscriber: item.subscriber,
 									unsubscribeLink: unsubscribeLink.replace(
 										/\{\{subscriberId\}\}/g,
