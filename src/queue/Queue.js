@@ -45,7 +45,7 @@ class Queue {
 			TableName: `${dbTablePrefix}Queue`,
 			ConsistentRead: true,
 			Limit: readBatchSize,
-			ScanIndexForward: false,
+			ScanIndexForward: true,
 			KeyConditionExpression: 'queuePlacement = :q and runAtModified <= :now',
 			ExpressionAttributeValues: {
 				':q': 'queued',
@@ -66,7 +66,7 @@ class Queue {
 		const choiceBatch = [];
 		const unsubscribeBatch = [];
 		const waitBatch = [];
-		batch.forEach(task => {
+		batch.forEach((task) => {
 			switch (task.type) {
 				case 'send email':
 					emailBatch.push(task);
@@ -111,7 +111,7 @@ class Queue {
 			resultBatches[3]
 		);
 		Logger.info(`Got ${results.length} processing results. Now cleaning up`);
-		const cleanUpTasks = results.map(result => {
+		const cleanUpTasks = results.map((result) => {
 			// Delete queue items that are successful or have been attempted
 			// too many times (note that deleted items are still archived).
 			if (result.status === 'success' || result.item.attempts > 0) {
@@ -148,7 +148,7 @@ class Queue {
 
 		let currentBatch = [];
 		const batches = [];
-		cleanUpTasks.forEach(task => {
+		cleanUpTasks.forEach((task) => {
 			if (currentBatch.length === writeBatchSize) {
 				batches.push(currentBatch);
 				currentBatch = [];
@@ -158,13 +158,13 @@ class Queue {
 		batches.push(currentBatch);
 
 		return Promise.all(
-			batches.map(cleanupBatch => {
+			batches.map((cleanupBatch) => {
 				return this.taskCleanUp(cleanupBatch);
 			})
 		)
-			.then(counters => {
+			.then((counters) => {
 				let totalTasks = 0;
-				counters.forEach(counter => (totalTasks += counter));
+				counters.forEach((counter) => (totalTasks += counter));
 				debugLog(
 					`${new Date().toISOString()}: ${totalTasks} cleanup tasks ` +
 						`complete`
@@ -172,14 +172,14 @@ class Queue {
 
 				// Archive successful or permanently failed items
 				const archiveable = results.filter(
-					res => res.status === 'success' || res.item.attempts > 0
+					(res) => res.status === 'success' || res.item.attempts > 0
 				);
 
 				if (!archiveable.length) {
 					return;
 				}
 
-				const archiveTasks = archiveable.map(result => {
+				const archiveTasks = archiveable.map((result) => {
 					const archiveItem = {
 						queuePlacement: dateStamp,
 						completed: true,
@@ -206,7 +206,7 @@ class Queue {
 
 				let currentArchiveBatch = [];
 				const archiveBatches = [];
-				archiveTasks.forEach(archiveTask => {
+				archiveTasks.forEach((archiveTask) => {
 					if (currentArchiveBatch.length === writeBatchSize) {
 						archiveBatches.push(currentArchiveBatch);
 						currentArchiveBatch = [];
@@ -216,12 +216,12 @@ class Queue {
 				archiveBatches.push(currentArchiveBatch);
 
 				return Promise.all(
-					archiveBatches.map(archiveBatch => {
+					archiveBatches.map((archiveBatch) => {
 						return this.addToArchive(archiveBatch);
 					})
-				).then(archiveCounters => {
+				).then((archiveCounters) => {
 					let totalArchiveTasks = 0;
-					archiveCounters.forEach(counter => (totalArchiveTasks += counter));
+					archiveCounters.forEach((counter) => (totalArchiveTasks += counter));
 					debugLog(
 						`${new Date().toISOString()}: ${totalArchiveTasks} archive ` +
 							`tasks complete`
@@ -230,13 +230,13 @@ class Queue {
 			})
 			.then(() => {
 				// Queue follow up actions for successful tasks
-				const successes = results.filter(res => res.status === 'success');
+				const successes = results.filter((res) => res.status === 'success');
 
 				if (!successes.length) {
 					return;
 				}
 
-				return queueNextActions(successes.map(res => res.item));
+				return queueNextActions(successes.map((res) => res.item));
 			});
 	}
 
@@ -251,7 +251,7 @@ class Queue {
 				},
 			})
 				.promise()
-				.then(result => {
+				.then((result) => {
 					const unprocessedItems = result.UnprocessedItems.Queue;
 					if (Array.isArray(unprocessedItems)) {
 						debugLog(
@@ -265,7 +265,7 @@ class Queue {
 					}
 					return resolve(taskCounter + batch.length);
 				})
-				.catch(err => {
+				.catch((err) => {
 					if (err.name === 'ProvisionedThroughputExceededException') {
 						debugLog(
 							`${new Date().toISOString()}: Requeuing cleanup batch ` +
@@ -296,7 +296,7 @@ class Queue {
 				},
 			})
 				.promise()
-				.then(result => {
+				.then((result) => {
 					const unprocessedItems = result.UnprocessedItems.Queue;
 					if (Array.isArray(unprocessedItems)) {
 						debugLog(
@@ -310,7 +310,7 @@ class Queue {
 					}
 					return resolve((taskCounter += batch.length));
 				})
-				.catch(err => {
+				.catch((err) => {
 					if (err.name === 'ProvisionedThroughputExceededException') {
 						debugLog(
 							`${new Date().toISOString()}: Requeuing archive batch after ` +

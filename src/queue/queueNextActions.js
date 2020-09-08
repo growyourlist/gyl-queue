@@ -1,6 +1,7 @@
-const getAutoresponder = require('./getAutoresponder')
-const newQueueItem = require('./newQueueItem')
-const batchWriteBatchesUntilDone = require('./batchWriteBatchesUntilDone')
+const getAutoresponder = require('./getAutoresponder');
+const newQueueItem = require('./newQueueItem');
+const batchWriteBatchesUntilDone = require('./batchWriteBatchesUntilDone');
+const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 /**
  * Looks through a batch of queued tasks. For each task that has a follow up
@@ -9,67 +10,66 @@ const batchWriteBatchesUntilDone = require('./batchWriteBatchesUntilDone')
  * @param  {Array} batch Batch of queue tasks.
  * @return {Promise}
  */
-const queueNextActions = batch => {
+const queueNextActions = (batch) => {
 	if (!batch.length) {
-		return Promise.resolve()
+		return Promise.resolve();
 	}
 
-	const putRequests = []
-	const promises = []
+	const putRequests = [];
+	const promises = [];
 	// For each task in the batch, look up the autoresponder definition and work
 	// out the next action to queue, if a next action is found.
-	batch.forEach(task => {
-
+	batch.forEach((task) => {
 		// If the queue item is not attached to an autoresponder, there's nothing
 		// more to do here.
 		if (!task.autoresponderId || !task.autoresponderStep) {
-			return
+			return;
 		}
 
 		promises.push(
-			getAutoresponder(task.autoresponderId)
-			.then(autoresponder => {
+			getAutoresponder(task.autoresponderId).then((autoresponder) => {
 				if (!autoresponder || !autoresponder.steps[task.autoresponderStep]) {
-					return
+					return;
 				}
 
 				// Get the update-to-date definition of the current step of the workflow
 				// in the autoresponder.
-				const currentStep = autoresponder.steps[task.autoresponderStep]
+				const currentStep = autoresponder.steps[task.autoresponderStep];
 				if (!currentStep) {
-					console.log(`autoresponder step ${task.autoresponderStep} not found`)
+					console.log(`autoresponder step ${task.autoresponderStep} not found`);
 					// If the step doesn't exist in the autoresponder anymore, ignore it
-					return
+					return;
 				}
 
-				let nextActionName = null
+				let nextActionName = null;
 				if (currentStep.nextAction) {
-					nextActionName = currentStep.nextAction
-				}
-				else if (currentStep.type === 'make choice based on tag') {
-					const tagToCheck = currentStep.tagToCheck
-					const hasTag = task.subscriber.tags && task.subscriber.tags.length
-					&& task.subscriber.tags.indexOf(tagToCheck) >= 0
+					nextActionName = currentStep.nextAction;
+				} else if (currentStep.type === 'make choice based on tag') {
+					const tagToCheck = currentStep.tagToCheck;
+					const hasTag =
+						task.subscriber.tags &&
+						task.subscriber.tags.length &&
+						task.subscriber.tags.indexOf(tagToCheck) >= 0;
 					if (hasTag) {
-						nextActionName = currentStep.yesAction
-					}
-					else {
-						nextActionName = currentStep.noAction
+						nextActionName = currentStep.yesAction;
+					} else {
+						nextActionName = currentStep.noAction;
 					}
 				}
 
-				const nextAction = nextActionName && autoresponder.steps[nextActionName]
+				const nextAction =
+					nextActionName && autoresponder.steps[nextActionName];
 
 				// If no next action was found based, then nothing more to do here. This
 				// is acceptable; for example, if no 'noAction' is defined for an
 				// autoresponder step, then it is okay to leave the autoresponder.
 				if (!nextAction) {
-					return
+					return;
 				}
 
-				const runAt = ((
-					currentStep.runNextIn && Date.now() + currentStep.runNextIn
-				) || Date.now())
+				const runAt =
+					(currentStep.runNextIn && Date.now() + currentStep.runNextIn) ||
+					Date.now();
 				putRequests.push({
 					PutRequest: {
 						Item: newQueueItem(
@@ -80,22 +80,25 @@ const queueNextActions = batch => {
 								autoresponderStep: nextActionName,
 							}),
 							runAt
-						)
-					}
-				})
+						),
+					},
+				});
 			})
-		)
-	})
+		);
+	});
 
-	return Promise.all(promises)
-	.then(() => {
+	return Promise.all(promises).then(() => {
 		if (!putRequests.length) {
-			return null
+			return null;
 		}
 
-		return batchWriteBatchesUntilDone(putRequests, 'Queue')
-		.catch(err => console.log(`Error adding follow up tasks: ${err.message}`))
-	})
-}
+		return batchWriteBatchesUntilDone(
+			putRequests,
+			`${dbTablePrefix}Queue`
+		).catch((err) =>
+			console.log(`Error adding follow up tasks: ${err.message}`)
+		);
+	});
+};
 
-module.exports = queueNextActions
+module.exports = queueNextActions;
