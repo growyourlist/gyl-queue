@@ -181,7 +181,8 @@ class Queue {
 
 				const archiveTasks = archiveable.map((result) => {
 					const archiveItem = {
-						queuePlacement: dateStamp,
+						// startDate is used for broadcasts
+						queuePlacement: result.item.startDate || dateStamp,
 						completed: true,
 						attempts: result.item.attempts + 1,
 						lastAttempt: result.timestamp,
@@ -194,6 +195,9 @@ class Queue {
 						templateId: result.item.templateId,
 						type: result.item.type,
 					};
+					if (result.item.broadcastRunAtId) {
+						archiveItem.broadcastRunAtId = result.item.broadcastRunAtId;
+					}
 					if (result.item.failureReason) {
 						archiveItem.failureReason = result.item.failureReason;
 					}
