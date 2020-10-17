@@ -182,7 +182,7 @@ class Queue {
 				const archiveTasks = archiveable.map((result) => {
 					const archiveItem = {
 						// startDate is used for broadcasts
-						queuePlacement: result.item.startDate || dateStamp,
+						queuePlacement: (result.item && result.item.startDate) || dateStamp,
 						completed: true,
 						attempts: result.item.attempts + 1,
 						lastAttempt: result.timestamp,
