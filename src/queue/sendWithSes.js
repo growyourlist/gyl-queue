@@ -183,7 +183,7 @@ const sendWithSes = async (batch, dateStamp) => {
 														encodeURIComponent(item.subscriber.email)
 													),
 											params: item.params,
-											timestamp: Date.now() / 1000,
+											timestamp: (Date.now() / 1000).toFixed(),
 										}),
 									};
 									const replacementTags = [
