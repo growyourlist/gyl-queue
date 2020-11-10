@@ -252,11 +252,23 @@ const sendWithSes = async (batch, dateStamp) => {
 						timestamp: Date.now(),
 					});
 				}
+				let Tags = null;
+				if (item.tagOnClick) {
+					Tags = [
+						{
+							Name: 'Interaction-Click',
+							Value: `add-tag_${item.tagOnClick}`,
+						}
+					];
+				}
 				return await ses
 					.sendEmail({
 						Destination: {
 							ToAddresses: [item.subscriber.email],
 						},
+						ConfigurationSetName:
+							process.env.SES_CONFIGURATION_SET_NAME ||
+							'GylSesConfigurationSet',
 						Source:
 							item.sourceEmail ||
 							(listSettings && listSettings.sourceEmail) ||
@@ -268,6 +280,7 @@ const sendWithSes = async (batch, dateStamp) => {
 							},
 							Body: generateBody(item.body, item.subscriber),
 						},
+						Tags: Tags ? Tags : undefined,
 					})
 					.promise()
 					.then(() => {
