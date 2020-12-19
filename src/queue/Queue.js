@@ -201,6 +201,15 @@ class Queue {
 					if (result.item.failureReason) {
 						archiveItem.failureReason = result.item.failureReason;
 					}
+					if (result.item.autoresponderId) {
+						archiveItem.autoresponderId = result.item.autoresponderId;
+					}
+					if (result.item.autoresponderStep) {
+						archiveItem.autoresponderStep = result.item.autoresponderStep;
+					}
+					if (result.item.tagReason) {
+						archiveItem.tagReason = result.item.tagReason;
+					}
 					return {
 						PutRequest: {
 							Item: archiveItem,
