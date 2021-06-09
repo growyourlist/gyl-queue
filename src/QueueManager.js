@@ -1,12 +1,24 @@
 const debugLog = require('./queue/debugLog');
 const Queue = require('./queue/Queue');
 const db = require('./dynamoDBClient');
+const { readBatchSize } = require('./queue/constants');
 
 const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
 const queue = new Queue();
 let isProcessing = false;
 let processId = null;
+
+const maxEmailsPerSecondRaw = process.env.MAX_EMAILS_PER_SECOND || '50';
+const maxEmailsPerSecond = !isNaN(parseFloat(maxEmailsPerSecondRaw)) ?
+	parseFloat(maxEmailsPerSecondRaw) :
+	50;
+
+const delayBetweenBatches = (
+	Math.round(1000 * (readBatchSize / maxEmailsPerSecond))
+) || 1000;
+
+console.info(`Running with ${delayBetweenBatches} millisecond delay between batches; that is, will send max ${maxEmailsPerSecond} emails per second`);
 
 /**
  * Returns true if the Queue table exists and is active, false otherwise.
