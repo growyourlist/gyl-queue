@@ -44,7 +44,7 @@ class QueueManager {
 	 */
 	on() {
 		console.log(`Started processing queue`);
-		processId = setInterval(this.processQueue, 1000);
+		processId = setInterval(this.processQueue, delayBetweenBatches);
 	}
 
 	/**
