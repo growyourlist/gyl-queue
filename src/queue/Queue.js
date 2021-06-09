@@ -256,44 +256,25 @@ class Queue {
 	/**
 	 * Processes the clean up tasks.
 	 */
-	taskCleanUp(batch, taskCounter = 0) {
-		return new Promise((resolve, reject) => {
-			db.batchWrite({
+	async taskCleanUp(batch) {
+		let itemsToProcess = batch
+		let itemsCleanedUpCount = 0;
+		while (itemsToProcess && itemsToProcess.length) {
+			const deleteResult = await db.batchWrite({
 				RequestItems: {
-					[`${dbTablePrefix}Queue`]: batch,
-				},
-			})
-				.promise()
-				.then((result) => {
-					const unprocessedItems = result.UnprocessedItems.Queue;
-					if (Array.isArray(unprocessedItems)) {
-						debugLog(
-							`${new Date().toISOString()}: Rescheduling ` +
-								`${unprocessedItems.length} unprocessed cleanup items`
-						);
-						return setTimeout(() => {
-							taskCounter += batch.length - unprocessedItems.length;
-							resolve(this.taskCleanUp(unprocessedItems, taskCounter));
-						}, Math.random() * 300);
-					}
-					return resolve(taskCounter + batch.length);
-				})
-				.catch((err) => {
-					if (err.name === 'ProvisionedThroughputExceededException') {
-						debugLog(
-							`${new Date().toISOString()}: Requeuing cleanup batch ` +
-								'after throughput exceeded'
-						);
-						return setTimeout(
-							() => resolve(this.taskCleanUp(batch, taskCounter)),
-							Math.random() * 500
-						);
-					}
-					console.log(`${new Date().toISOString()}: Clean up batch failed:`);
-					console.log(err);
-					resolve(taskCounter);
-				});
-		});
+					[`${dbTablePrefix}Queue`]: itemsToProcess,
+				}
+			}).promise();
+			const unprocessedItems = deleteResult.UnprocessedItems.Queue;
+			if (Array.isArray(unprocessedItems) && unprocessedItems.length) {
+				itemsCleanedUpCount += itemsToProcess.length - unprocessedItems.length;
+				itemsToProcess = unprocessedItems;
+			} else {
+				itemsCleanedUpCount += itemsToProcess.length;
+				itemsToProcess = false;
+			}
+		}
+		return itemsCleanedUpCount;
 	}
 
 	/**
