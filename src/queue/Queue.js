@@ -6,7 +6,7 @@ const sendEmailBatch = require('./sendEmailBatch');
 const refreshSubscribers = require('./refreshSubscribers');
 const unsubscribeSubscribers = require('./unsubscribeSubscribers');
 const wrapWaitTasks = require('./wrapWaitTasks');
-const { readBatchSize } = require('./queue/constants');
+const { readBatchSize } = require('./constants');
 const writeBatchSize = 25;
 const dbTablePrefix = process.env.DB_TABLE_PREFIX || '';
 
