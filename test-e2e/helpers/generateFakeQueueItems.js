@@ -1,9 +1,9 @@
-const uuid = require('uuid/v4')
+const {v4} = require('uuid')
 const newQueueItem = require('../../src/queue/newQueueItem')
 
 const generateFakeQueueItems = (numberOfItems, opts = {}) => {
 	return Array(numberOfItems).fill(null).map((_, i) => {
-		const subscriberId = uuid()
+		const subscriberId = v4()
 		return newQueueItem({
 			type: 'send email',
 			subscriber: {
@@ -35,7 +35,7 @@ const generateFakeBody = i => {
 
 const generateIndividualSendFakeQueueItems = (numberOfItems, opts = {}) => {
 	return Array(numberOfItems).fill(null).map((_, i) => {
-		const subscriberId = uuid()
+		const subscriberId = v4()
 		return newQueueItem({
 			type: 'send email',
 			subscriber: {
