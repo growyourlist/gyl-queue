@@ -265,7 +265,7 @@ class Queue {
 					[`${dbTablePrefix}Queue`]: itemsToProcess,
 				}
 			}).promise();
-			const unprocessedItems = deleteResult.UnprocessedItems.Queue;
+			const unprocessedItems = deleteResult.UnprocessedItems[`${dbTablePrefix}Queue`];
 			if (Array.isArray(unprocessedItems) && unprocessedItems.length) {
 				itemsCleanedUpCount += itemsToProcess.length - unprocessedItems.length;
 				itemsToProcess = unprocessedItems;
