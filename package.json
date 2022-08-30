@@ -18,7 +18,7 @@
     "aws-sdk": "^2.390.0",
     "dotenv": "^10.0.0",
     "dynopromise-client": "^0.2.0",
-    "moment-timezone": "^0.5.23",
+    "moment-timezone": "^0.5.35",
     "query-all-for-dynamodb": "^0.0.2",
     "uuid": "^8.3.2",
     "write-all-for-dynamodb": "^0.0.3"
